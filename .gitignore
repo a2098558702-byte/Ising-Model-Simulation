@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.npy
+*.dat
+*.csv
+.DS_Store

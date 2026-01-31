@@ -1,0 +1,347 @@
+第一章:造物与初始化
+
+1.刻度尺:np.linspace(起点, 终点, 你要多少个点)
+
+eg:你要扫描温度 $T$ 从 $1.5$ 到 $3.5$，总共想测 $21$ 个点。
+T_range = np.linspace(1.5, 3.5, 21)
+print(T_range)
+# 输出：[1.5, 1.6, 1.7, ... , 3.5]  <-- 自动帮你算好间隔！
+
+
+
+2.预定空箱子:np.zeros(num)/np.ones(num) # 创建一个num位, 都是0/1的数组
+
+eg:我们要存 21 个温度点对应的磁化率 $M$。
+# 先定好温度轴
+num_points = 21
+T_range = no.linsapce(1.5, 3.5, num_points)
+# 构建一个全 0 的数组
+M_list = np.zeros(num_points)
+
+
+
+3.上帝掷骰子:np.random
+np.random.choice([-1, 1], (L, L), p=[p1, p2]) 
+# p1, p2分别对应-1, 1出现的概率
+# [-1, 1]为数组中可选的元
+# (L, L)为数组的宽度
+np.ones((L, L)) # 用于零温启动, 全是1的数组
+np.random.rand(L, L) # 生成0到1之间的随机浮点数（有效位数15-17）
+# np.random.rand(num) --> num个随机数组
+# np.random.rand((L, L)) --> L x L 的随机矩阵：
+# [[0.11, 0.92, ...],
+#  [0.55, 0.03, ...], 
+#        ...        ]
+np.random.randint(0, L)  # 在0到L选一个整数, 而非浮点数
+
+
+EX1:假设你现在要做一个实验：
+1.系统尺寸 $L=64$。
+2.要跑 51 个温度点。
+3.要两个数组, 一个存能量 E, 一个存磁化率 M。
+
+# 参数控制区
+L = 64
+num_points = 51 # 指测温点位
+T_min = num1
+T_max = num2
+
+# 变量定义区
+config = np.random.choice([-1, 1], (L, L))
+T_range = np.linspace(T_min, T_max, num_points)
+M_list = np.zeros(num_points)
+E_list = np.zeros(num_points)
+
+
+
+
+
+第二章:切片与视图
+
+1.基础刀法 局部放大: [开始:结束]
+语法:数组[行开始:行结束, 列开始:列结束], 注意含头不含尾
+eg:你的 $L=64$ 的格点里，
+你发现在左上角 $(0,0)$ 到 $(10,10)$ 的区域形成了一个奇怪的“磁畴”（Domain）。
+你想把这一小块拿出来单独分析，或者画图。
+# 取左上角 10x10 的区域
+sub_region = config[0:10, 0:10]
+# 取第 30 行整行,其中 30:31 == 30; : 表示这一行全要了
+row_30 = config[30, :]
+
+注意:sub_region只是放大, 修改它会改变config
+可用: sub_region = config[0:10, 0:10].copy()
+来产生一个局部复制品.
+
+
+
+2.进阶刀法 粗粒化:[::步长]
+语法:数组[开始:结束:步长]
+简写:[::2], 代表从头到尾, 隔一个取一个
+eg:空间重整化
+# 原始尺寸：64x64
+# 粗粒化：每隔 1 个点采一个样
+coarse_grained = config[::2, ::2]
+# 现在的尺寸：32x32
+# 物理意义：你刚刚完成了一次简单的“空间重整化”！
+
+
+
+3.倒序刀法 时光回溯:[-1]
+语法:负数索引, -1 代表最后一个, -2 代表倒数第二个
+eg:你跑了一个时间演化的模拟，数据存成了三维数组 history, 形状是 (时间, L, L)。
+# 末态
+final_state= history[-1, L, L]  # 可简写为history[-1]
+# 取某点(x, y)所有时刻的数据
+xy_spin_time_series = history[:, x, y]
+
+
+EX2:你有4x4的数组
+[[-1, -1, -1, -1]
+ [-1,  1, -1,  1],
+ [ 1,  1,  1,  1],
+ [-1, -1, -1, -1]]
+ 名字叫 config。
+ 任务：
+ 1.我想把最外面的一圈切掉，只留中间 $2 \times 2$ 的核心。怎么写？
+ 2.我想把这个矩阵上下颠倒（倒序），怎么写？
+
+ 1:
+ config_1 = config[1:3, 1:3]
+ 2:
+ config_2 = config[::-1, :]
+
+
+
+切片偷懒指南:
+1.尾巴可以省 data[10, :, :] == data[10]
+2.头的:不能省 必须写为data[:, 10, 10]
+3.大杀器...   data[:, :, :, 100] = data[..., 100]
+
+
+第三章 变形与广播
+
+1.物理图像的重组:reshape
+语法:数组.reshape(新形状), 注意必须元素数守恒
+# 把一个包含 1024 个数字的长条(data)，变成 32x32 的格点
+lattice = data.reshape((32, 32))
+
+高级技巧:-1 的懒人用法 有时候你懒得算具体的维度，你可以让 NumPy 自己算。 
+lattice = data_flat.reshape((32, -1)) 
+含义：“我要 32 行，列数你自己看着办，把剩下的填满就行。”
+
+2. ravel vs flatten
+
+你想画一个直方图, 看看系统的磁化分布。plt.hist() 这个函数通常只吃一维数组。
+但你的数据是 $L \times L$ 的矩阵。
+你需要把它**“拍扁”**。
+lattice.ravel() 输出的只是个投影, 不占新内存, 极快
+lattice.flatten() 完全复制一个, 慢
+首选ravel()
+
+3.广播机制
+数组E(任意维度都可)
+E - 1  会让每个格点都减5, 类似和全1矩阵进行减法
+两个数组间减法, 必须先reshape成同样维度的.
+
+eg1:你有一个数据 all_data, 形状是 (100, 5000)。
+100:100 个温度点。
+5000:每个温度下测了 5000 次能量 $E$。
+我想把每个温度下的能量，都减去该温度下的平均值
+E_mean = np.mean(E).reshape((100, 1))
+
+eg2:你有一个 $L \times L$ 的晶格。
+你想加一个外磁场 $H$，但这个磁场是不均匀的，它随位置变化。
+$H$ 是一个 $L \times L$ 的矩阵。
+你的模拟数据 all_configs 是 (温度T, L, L) 的三维数组。
+任务：计算总能量项 $-\sum S_{i,j} H_{i,j}$。
+需要把 50 个温度下的 config 都乘以同一个磁场 H。
+all_configs: (50, 64, 64)
+H_field:     (64, 64)
+
+H_field_reshape = H_field.reshape((1, 64, 64)) 
+# 这行不用写了, 从右开始一样的几个维度自动对齐
+E_single = -all_configs * H_field_reshape  
+# 详细给我讲讲直接对齐的机制, 是只对齐一位, 还是从右开始只要一样的就对齐
+E_sum = np.sum(E_single)
+
+eg2:
+还是 (温度T, L, L) 的数据，比如 (50, 64, 64)。
+你想算出每一个温度下的平均磁化强度 $M(T)$，
+然后从原本的格点里把这个 $M(T)$ 减掉
+（这在某些涨落分析里有用，虽然物理上减标量有点怪，这里仅作广播演示）。
+
+M_T = mp.mean(all_configs, axis=(1, 2))
+# 结果形状：(50,)  <-- 50 个数
+M_T_reshape = M_T.reshape((50, 1, 1))
+deltaM_T = all_configs - M_T_reshape
+
+
+EX3:假设你有一个形状为 (51, 64, 64) 的数组 all_configs.
+代表 51 个温度点下各一个 $64 \times 64$ 的格点快照。
+如果你想算出：
+1.第 10 个温度点的磁化强度总和。
+2.把所有格点的状态全部从 1/-1 翻转成 -1/1(也就是整体反转)。
+
+1:
+config_T10 = all_configs[10, ::] # all_configs[10] 默认后面全选
+M_sum = np.sum(config_T10)
+2:
+all_configs *= -1
+
+EX3pro:
+你从文件里读入了一串很长的数据 raw_data(一维数组), 总共有 10,000 个数。 
+你知道这其实是 100 个样本，每个样本有 100 个特征。
+1.先把 raw_data 重塑成 (100, 100) 的矩阵。
+2.要把每一个样本（每一行）都乘以一个权重系数。
+权重系数存在 weights 数组里，长度是 100(对应 100 个特征，即每一列)。
+
+raw_data_reshape = raw_data.reshape((100,100))
+weights_reshape = weights.reshape((1, 100))  
+# 这行不用写, 因为NumPy广播从右往左开始,最右边对齐了就开始广播
+raw_data_final = raw_data_reshape * weights_reshape
+
+
+
+第四章 聚合与统计
+
+1.拍扁与轴
+哪个轴上做统计, 哪个轴就没了
+
+eg1:我想算每一个温度下的总磁矩 $M$
+你要把每一个 $64 \times 64$ 的棋盘里的数加起来。
+操作：你要把第 1 维和第 2 维（空间维）拍扁，只保留第 0 维（温度维）。
+
+# axis=(1, 2) 意思是：沿着行和列求和，把它们消灭掉
+M_list = np.sum(all_configs, axis=(1, 2))
+# 结果形状：
+# 输入 (51, 64, 64) -> 输出 (51,)
+# 完美！这正是你要画图用的横坐标。
+
+eg2:我想看“平均自旋图” (Average Pattern)
+你想看看在这 51 个温度下，格点正中心那个点是不是总是倾向于朝上。 
+操作：你要把第 0 维（温度/时间）拍扁，保留第 1、2 维（空间结构）。
+
+# axis=0 意思是：沿着温度轴求平均
+avg_pattern = np.mean(all_configs, axis=0)
+# 结果形状：
+# 输入 (51, 64, 64) -> 输出 (64, 64)
+# 物理意义：你会得到一张二维热力图。
+
+
+2.神器
+2.1 np.sum()  总和
+2.2 np.abs()  绝对值
+2.3 np.meam() 平均值
+2.4 np.std()  标准差
+2.5 np.var()  方差 
+善用axis= 可以将上述工具范围限定在某几个维度, 如果不写就默认对所有维度进行操作
+
+EX4:你有一个名为 history 的二维数组，形状是 (100, 5000)。
+100: 代表 100 个温度点。
+5000: 代表每个温度下采样的 5000 个磁化强度值 $M$（时间序列）。
+你要处理这堆数据，画出两条线：
+1.相变曲线：每个温度下的平均磁化强度 $\langle |M| \rangle$。
+2.误差棒 (Error Bar)：每个温度下 $M$ 的标准差（涨落）
+M_T_avg = np.mean(np.abs(history), axis=1)
+M_T_std = np.std(history, axis=1)
+
+
+
+第五章 掩码与搜索
+
+1.基础掩码:arr[条件]
+
+eg:你跑了 100 个温度点（存在 T_range 里），
+以及对应的 100 个磁化率（存在 M_list 里）。
+现在，你想只看低温相 ($T < 2.27$) 的数据。
+
+M_low_temp = M_list[T_range < 2.27] 
+# 要求M_list 和 T_range 长度相同, 就能用T数组的bool值判断M数组
+# M中本身并没有任何与T有关的记录, 只是一个与M有关的纯数组
+2.多重条件语法与python不同
+ and --> &
+  or --> |
+并且每个条件单独要加括号
+eg:
+# 错误写法 ❌ (会被 Python 骂死)
+# mask = T_range > 2.0 and T_range < 2.5
+
+# 正确写法 ✅ (位运算符 + 括号)
+critical_zone_mask = (T_range > 2.0) & (T_range < 2.5)
+
+M_critical = M_list[critical_zone_mask]
+
+
+3. np.where 定位与替换
+A:寻找坐标
+eg:# np.where(条件) 返回的是索引 (Indices)
+indices = np.where(T_range == 2.27)
+# 输出可能像：(array([35]),) -> 说明是第 35 个点
+B:条件替换
+语法:np.where(条件, 条件成立选我, 不成立选我)
+eg:
+M_clean= np.where(M_list > 1.0, 1.0, M_list)
+
+第六章 文件存取
+
+1. np.save/np.load 人类看不了(乱码), python很喜欢
+保存/载入 .npy(二进制) 格式
+语法:
+np.save(file, arr)    
+
+np.load(file)    .npy/.npz都能读取
+读.npy:
+arr = np.load("final_state.npy")
+# arr 直接就是那个数组
+
+读.npz:
+data = np.load("experiment_01.npz")
+# data 是个字典，你得用钥匙取出来
+T = data['T']      # 取出温度
+M = data['Mag']    # 取出磁化率
+
+
+eg:
+import numpy as np
+# 假设这是你辛苦算出来的结果
+big_data = np.random.rand(51, 64, 64)
+# 1. 存档 (存成 .npy 文件)
+np.save("simulation_result.npy", big_data)
+# 此时硬盘上多了一个文件，以后你可以安心关机了。
+# 2. 读档 (下次开机)
+loaded_data = np.load("simulation_result.npy")
+print(loaded_data.shape) 
+# 输出：(51, 64, 64) -> 完美复活！
+
+2. np.savetxt/np.loadtxt
+慢, 但什么软件都可以打开
+
+3.np.savez 全部打包带走,压缩包.npz
+语法:np.savez(file, *args, **kwds)
+**kwds --> T=T_range, Mag=M_list  等号左边这个名字就是读取数据的钥匙
+eg:
+# 1. 打包保存
+# 就像这就把所有变量塞进一个压缩包
+np.savez("final_experiment_v1.npz", T=T_range, Mag=M_avg, Eng=E_avg)
+
+# 2. 读取 (像查字典一样)
+data = np.load("final_experiment_v1.npz")
+
+# 提取你需要的部分
+my_T = data['T']    # 拿出温度
+my_M = data['Mag']  # 拿出磁化率
+
+
+
+第七章 补充!!!
+
+7.1 np.exp() 计算指数函数
+
+7.2 np.array([python列表]) 把python列表转化为numpy形式的数组
+# 要求python列表里全为同类型变量
+应用:指定列表内的参数值用这个,如果是随机/等间隔生成,有直接的numpy函数,快很多
+eg:
+T_range = np.array([2.0, 2.1, 2.2, 2.25, 2.3, 2.4, 2.5])
+
+
+7.3
